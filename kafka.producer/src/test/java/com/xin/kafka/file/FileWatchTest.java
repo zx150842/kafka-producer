@@ -19,7 +19,7 @@ public class FileWatchTest {
   @Test
   public void test() {
     KafkaProducer producer = new KafkaProducer();
-    DirectoryWatcher watcher = new DirectoryWatcher("D:\\");
+    DirectoryWatcher watcher = new DirectoryWatcher("D:\\360Downloads");
     watcher.addObserver(producer);
     watcher.watch();
   }
@@ -44,7 +44,6 @@ public class FileWatchTest {
   
   public class DirectoryWatcher extends Observable {
     
-    private WatchKey key;
     private WatchService watcher;
     
     public DirectoryWatcher(String dir) {
@@ -53,7 +52,6 @@ public class FileWatchTest {
       try {
         WatchService watcher = fileSystem.newWatchService();
         WatchKey key = path.register(watcher, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY);
-        this.key = key;
         this.watcher = watcher;
       } catch (IOException e) {
         // TODO Auto-generated catch block
@@ -65,6 +63,7 @@ public class FileWatchTest {
       while (true) {
         WatchKey key;
         try {
+          Thread.sleep(10000);
           key = watcher.take();
         } catch (InterruptedException e) {
           return;

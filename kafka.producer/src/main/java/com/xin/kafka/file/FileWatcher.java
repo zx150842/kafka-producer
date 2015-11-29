@@ -88,7 +88,7 @@ public class FileWatcher extends Observable {
         if (event.equals(OVERFLOW)) {
           continue;
         }
-        notice(dir, event);
+        notice(dir.toAbsolutePath().toString(), event);
         registerNewDirectory(dir, event);
       }
       boolean valid = key.reset();
@@ -101,9 +101,12 @@ public class FileWatcher extends Observable {
     }
   }
   
-  private void notice(Path path, WatchEvent<?> event) {
+  private void notice(String root, WatchEvent<?> event) {
     setChanged();
-    notifyObservers(new Info(path, event));
+    String path = root + "/" + ((Path)event.context()).getFileName();
+    System.out.println("---watcher---");
+    System.out.println("Path : " + path);
+    notifyObservers(new Info(path, event.kind()));
   }
   
   private void registerAll(Path rootDiretory) throws IOException {
@@ -139,20 +142,20 @@ public class FileWatcher extends Observable {
   }
   
   public static class Info {
-    private final Path path;
-    private final WatchEvent<?> event;
+    private final String path;
+    private final Kind<?> kind;
     
-    public Info(Path path, WatchEvent<?> event) {
+    public Info(String path, Kind<?> kind) {
       this.path = path;
-      this.event = event;
+      this.kind = kind;
     }
 
-    public Path getPath() {
+    public String getPath() {
       return path;
     }
 
-    public WatchEvent<?> getEvent() {
-      return event;
+    public Kind<?> getKind() {
+      return kind;
     }
   }
 }
