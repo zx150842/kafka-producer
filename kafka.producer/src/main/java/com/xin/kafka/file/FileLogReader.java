@@ -1,50 +1,58 @@
 package com.xin.kafka.file;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import com.xin.kafka.file.ObserverTest.Producer;
-import com.xin.kafka.util.FileUtil;
+import com.xin.kafka.producer.Producer;
+import com.xin.kafka.producer.ProducerFactory;
+import com.xin.kafka.util.Resources;
 
-public class FileLogReader implements Runnable {
+public class FileLogReader extends LogReader implements Runnable {
   
-  private boolean finished = false;
+  private final Path logFilePath;
   
-  private Producer producer;
-  private String path;
-  
-  private final int maxLine;
   private final int persistLines;
   private final long persistPeriod;
   private final long readInterval;
   private final Pattern timestampPattern;
+  private final int retryCount;
+  private final Path checkPointPath;
+  private final String topic;
   
+  private boolean finished = false;
   private long startTime;
   private int linesNotPersist = 0;
-  private String checkPointPath;
   
-  public FileLogReader(Configuration conf, String path) {
-    this.path = path;
-    this.maxLine = conf.getMaxLine();
+  public FileLogReader(Configuration conf, Path logFilePath) {
+    super(conf);
+    this.logFilePath = logFilePath;
     this.persistLines = conf.getPersistLines();
     this.persistPeriod = conf.getPersistPeriod();
-    this.readInterval = conf.getRetryInterval();
+    this.readInterval = conf.getReadInterval();
     this.timestampPattern = conf.getTimestampPattern();
-    this.checkPointPath = conf.getCheckPointPath() + "/" + Paths.get(path).getFileName();
+    this.retryCount = conf.getRetryCount();
+    this.checkPointPath = Paths.get(conf.getCheckPointPath().toString(), logFilePath.getFileName().toString());
+    try {
+      this.topic = Resources.getResourceAsProperties("topic.properties").getProperty("topics");
+    } catch (IOException e) {
+      log.error("[FileLogReader]Cannot get topic, error : {}", e);
+      throw new RuntimeException("[FileLogReader]Cannot get topic.", e);
+    }
   }
 
   @Override
   public void run() {
     
     setStartTime();
-    int startLine = CheckPoint.get(checkPointPath);
+    start = CheckPoint.get(checkPointPath, logFilePath);
+    prepare(logFilePath);
     while (!finished) {
       try {
-        final int from = startLine;
-        List<String> lines = FileUtil.read(path, from, maxLine);
+        List<String> lines = readLines();
         if (lines == null || lines.isEmpty()) {
           if (isHistoryLog()) {
             finished();
@@ -52,13 +60,26 @@ public class FileLogReader implements Runnable {
           }
         }
         // send to kafka
-        for (String line : lines) {
-          System.out.println("fileLogReader read : " + line);
+        Producer producer = ProducerFactory.getProducer(topic);
+        int currentRetry = 0;
+        while (currentRetry <= retryCount) {
+          if (!producer.send(lines)) {
+            currentRetry++;
+            sleep(readInterval);
+          } else {
+            break;
+          }
         }
-        startLine += lines.size();
+        if (currentRetry > retryCount) {
+          log.warn("[FileLogReader]Cannot send log to kafka cluster, retry count : {}", currentRetry);
+          return;
+        }
+        for (String line : lines) {
+          log.info("[FileLogReader]FileLogReader read : {}", line);
+        }
         linesNotPersist += lines.size();
         if (need2Persist()) {
-          CheckPoint.persist(checkPointPath, startLine);
+          CheckPoint.persist(checkPointPath, logFilePath, start);
           resetReader();
         }
         sleep(readInterval);
@@ -68,7 +89,7 @@ public class FileLogReader implements Runnable {
         }
       } 
     }
-    CheckPoint.persist(checkPointPath, startLine);
+    CheckPoint.persist(checkPointPath, logFilePath, start);
   }
   
   public void finished() {
@@ -100,7 +121,7 @@ public class FileLogReader implements Runnable {
   }
   
   private boolean isHistoryLog() {
-    Matcher matcher = timestampPattern.matcher(path); 
+    Matcher matcher = timestampPattern.matcher(logFilePath.toString()); 
     while (matcher.find()) {
       return true;
     }

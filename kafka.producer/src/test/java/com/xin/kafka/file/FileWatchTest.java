@@ -17,9 +17,16 @@ import static java.nio.file.StandardWatchEventKinds.*;
 public class FileWatchTest {
 
   @Test
+  public void WatchTest() throws InterruptedException {
+    FileWatcher watcher = new FileWatcher("D:\\test\\test", true);
+    watcher.execute();
+    Thread.sleep(4000000);
+  }
+  
+  @Test
   public void test() {
     KafkaProducer producer = new KafkaProducer();
-    DirectoryWatcher watcher = new DirectoryWatcher("D:\\360Downloads");
+    DirectoryWatcher watcher = new DirectoryWatcher("D:\\test\\test");
     watcher.addObserver(producer);
     watcher.watch();
   }

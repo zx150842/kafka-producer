@@ -7,6 +7,7 @@ import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchEvent.Kind;
@@ -21,10 +22,15 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import static java.nio.file.StandardWatchEventKinds.*;
 
 public class FileWatcher extends Observable {
 
+  static final Logger log = LoggerFactory.getLogger(FileWatcher.class);
+  
   WatchService watcher;
   boolean recursive;
   Map<WatchKey, Path> directoriesByKey = new HashMap<WatchKey, Path>();
@@ -50,7 +56,7 @@ public class FileWatcher extends Observable {
       watcher = fileSystem.newWatchService();
       create(path);
     } catch (IOException e) {
-      throw new RuntimeException("");
+      log.error("[Watcher]Cannot create watcher, path : {}, recursive : {}, error : {}. ", path, recursive, e);
     }
   }
   
@@ -62,7 +68,7 @@ public class FileWatcher extends Observable {
         register(directory);
       }
     } catch (Exception e) {
-      throw new RuntimeException("");
+      log.error("[Watcher]Cannot create watch, path : {}, error : {}. ", directory, e);
     }
   }
   
@@ -81,6 +87,7 @@ public class FileWatcher extends Observable {
       try {
         key = watcher.take();
       } catch (InterruptedException e) {
+        log.error("[Watcher]Watcher thread is interrupted, error : {}. ", e);
         return;
       }
       final Path dir = directoriesByKey.get(key);
@@ -88,24 +95,23 @@ public class FileWatcher extends Observable {
         if (event.equals(OVERFLOW)) {
           continue;
         }
-        notice(dir.toAbsolutePath().toString(), event);
+        notice(dir, event);
         registerNewDirectory(dir, event);
       }
       boolean valid = key.reset();
       if (!valid) {
         directoriesByKey.remove(key);
         if (directoriesByKey.isEmpty()) {
+          log.info("[Watcher]There is nothing to watch, exit watching. ");
           break;
         }
       }
     }
   }
   
-  private void notice(String root, WatchEvent<?> event) {
+  private void notice(Path root, WatchEvent<?> event) {
     setChanged();
-    String path = root + "/" + ((Path)event.context()).getFileName();
-    System.out.println("---watcher---");
-    System.out.println("Path : " + path);
+    Path path = Paths.get(root.toString(), ((Path)event.context()).toString());
     notifyObservers(new Info(path, event.kind()));
   }
   
@@ -136,21 +142,21 @@ public class FileWatcher extends Observable {
           registerAll(child);
         }
       } catch (IOException e) {
-        throw new RuntimeException("");
+        log.error("[Watcher]Cannot register new directory, path : {}, error : {}. ", dir, e);
       }
     }
   }
   
   public static class Info {
-    private final String path;
+    private final Path path;
     private final Kind<?> kind;
     
-    public Info(String path, Kind<?> kind) {
+    public Info(Path path, Kind<?> kind) {
       this.path = path;
       this.kind = kind;
     }
 
-    public String getPath() {
+    public Path getPath() {
       return path;
     }
 

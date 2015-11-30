@@ -1,29 +1,31 @@
 package com.xin.kafka.file;
 
+import java.nio.file.Path;
 import java.util.regex.Pattern;
 
 public class Configuration {
 
-  // 一次最多读取的行数
-  private int maxLine = 50;
   // 达到多少行时需要持久化
   private int persistLines = 100;
   // 持久化最大时间间隔ms
   private long persistPeriod = 500;
   // 失败重试次数
   private int retryCount = 3;
-  // 失败重试间隔时间
+  // 失败重试间隔时间ms
   private long retryInterval = 100;
+  // reader线程读取间隔时间ms
+  private long readInterval = 100;
+  // bytebuffer缓存大小
+  private int maxSize = 1000;
+  // 被监控的log文件路径
+  private Path logFilePath;
   // 检查点文件保存路径
-  private String checkPointPath;
+  private Path checkPointPath;
+  // monitor线程检查间隔时间ms
   private long monitorInterval = 1000;
+  // 切分后的点击log的时间戳后缀, 默认yyMMddHHmmss
+  private Pattern timestampPattern = Pattern.compile("[0-9]{12}$"); 
   
-  private Pattern timestampPattern; 
-  
-  public int getMaxLine() {
-    return maxLine;
-  }
-
   public int getPersistLines() {
     return persistLines;
   }
@@ -40,7 +42,15 @@ public class Configuration {
     return retryInterval;
   }
 
-  public String getCheckPointPath() {
+  public long getReadInterval() {
+    return readInterval;
+  }
+
+  public int getMaxSize() {
+    return maxSize;
+  }
+
+  public Path getCheckPointPath() {
     return checkPointPath;
   }
 
@@ -52,16 +62,16 @@ public class Configuration {
     return timestampPattern;
   }
 
+  public Path getLogFilePath() {
+    return logFilePath;
+  }
+
   public static class Builder {
     private Configuration conf = new Configuration();
     
-    public Builder(String checkPointPath) {
+    public Builder(Path logFilePath, Path checkPointPath) {
+      conf.logFilePath = logFilePath;
       conf.checkPointPath = checkPointPath;
-    }
-    
-    public Builder maxLine(int maxLine) {
-      conf.maxLine = maxLine;
-      return this;
     }
     
     public Builder persistLines(int persistLines) {
@@ -91,6 +101,16 @@ public class Configuration {
     
     public Builder suffixTimestampRegex(String suffixTimestampRegex) {
       conf.timestampPattern = Pattern.compile(suffixTimestampRegex);
+      return this;
+    }
+    
+    public Builder readInterval(long readInterval) {
+      conf.readInterval = readInterval;
+      return this;
+    }
+    
+    public Builder maxSize(int maxSize) {
+      conf.maxSize = maxSize;
       return this;
     }
     
